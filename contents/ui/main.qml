@@ -98,23 +98,35 @@ PlasmoidItem {
         readonly property int rows:     (count > 0 && count > root.maxRows) ? root.maxRows : (count > 0 ? 1 : 1)
         readonly property int cols:     count > 0 ? Math.ceil(count / rows) : 1
         readonly property int btnH:     height > 0 ? Math.floor(height / rows) : Kirigami.Units.gridUnit * 2
-        readonly property int btnW:     root.buttonWidth
+        // Icon-only with a single window → square button; otherwise full width
+        readonly property int btnW:     (count === 1 && singleWindowMode === 1) ? btnH : root.buttonWidth
 
-        // Tell the Plasma panel how much space we need via Layout attached props.
-        // implicitWidth alone is not enough — the panel uses Qt Layouts.
-        Layout.preferredWidth:  cols * btnW
-        Layout.minimumWidth:    btnW
-        Layout.fillWidth:       false
+        // 0=Left  1=Right
+        readonly property int alignment:        Plasmoid.configuration.alignment
+        // 0=icon+text  1=icon only  2=hidden
+        readonly property int singleWindowMode: Plasmoid.configuration.singleWindowMode
+
+        // Hide the whole widget when there is exactly one window and mode is "do not show"
+        visible:              !(count === 1 && singleWindowMode === 2)
+        Layout.preferredWidth: (count === 1 && singleWindowMode === 2) ? 0 : cols * btnW
+
+        // Left: compact (only as wide as the buttons).
+        // Right: fill available panel space so there is room to align within.
+        Layout.minimumWidth: btnW
+        Layout.fillWidth:    alignment === 1
 
         implicitWidth:  Layout.preferredWidth
         implicitHeight: rows * Kirigami.Units.gridUnit * 2
 
-        // Grid of window buttons
-        Grid {
-            anchors.fill: parent
-            columns:      Math.max(1, container.cols)
-            rowSpacing:   0
-            columnSpacing: 0
+        // Buttons — each delegate is positioned explicitly so incomplete
+        // last rows can be shifted for center/right alignment.
+        Item {
+            id: windowGrid
+            height: parent.height
+            width:  container.cols * container.btnW
+
+            // Shift the whole block within the container
+            x: container.alignment === 1 ? Math.max(0, parent.width - width) : 0
 
             Repeater {
                 model: filteredModel
@@ -122,23 +134,34 @@ PlasmoidItem {
                 delegate: Item {
                     id: delegate
 
+                    required property int     index   // Repeater index → used for position
                     required property int     taskRow
                     required property string  windowTitle
                     required property bool    isActive
                     required property bool    isMinimized
                     required property bool    isDemandingAttention
 
+                    // ---- per-delegate position ----
+                    readonly property int naturalRow: Math.floor(index / container.cols)
+                    readonly property int naturalCol: index % container.cols
+
+                    // Items that land in the last row
+                    readonly property int lastRowCount:
+                        filteredModel.count - (container.rows - 1) * container.cols
+
+                    // Pixel x: full rows fill edge-to-edge; last row shifts right when right-aligned.
+                    x: {
+                        var base = naturalCol * container.btnW
+                        if (naturalRow < container.rows - 1) return base   // full row — no shift
+                        if (container.alignment !== 1) return base         // left — no shift
+                        var gap = (container.cols - lastRowCount) * container.btnW
+                        return gap + base                                   // right
+                    }
+                    y:      naturalRow * container.btnH
                     width:  container.btnW
                     height: container.btnH
 
                     HoverHandler { id: hoverHandler }
-
-                    // Tooltip with full window title
-                    QQC2.ToolTip {
-                        visible: hoverHandler.hovered
-                        text:    delegate.windowTitle
-                        delay:   700
-                    }
 
                     // Background — declared first so it renders beneath the content
                     Rectangle {
@@ -168,13 +191,17 @@ PlasmoidItem {
 
                     // Icon + label — declared after Rectangle so it renders on top
                     RowLayout {
-                        anchors {
-                            left:           parent.left
-                            right:          parent.right
-                            leftMargin:     Kirigami.Units.smallSpacing * 2
-                            rightMargin:    Kirigami.Units.smallSpacing * 2
-                            verticalCenter: parent.verticalCenter
-                        }
+                        readonly property bool iconOnly:
+                            filteredModel.count === 1 && container.singleWindowMode === 1
+
+                        // Icon-only: centre in the (square) button.
+                        // Normal:    stretch left-to-right with side padding.
+                        anchors.verticalCenter:   parent.verticalCenter
+                        anchors.horizontalCenter: iconOnly ? parent.horizontalCenter : undefined
+                        anchors.left:             iconOnly ? undefined : parent.left
+                        anchors.right:            iconOnly ? undefined : parent.right
+                        anchors.leftMargin:       Kirigami.Units.smallSpacing * 2
+                        anchors.rightMargin:      Kirigami.Units.smallSpacing * 2
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Icon {
@@ -192,6 +219,7 @@ PlasmoidItem {
 
                         PlasmaComponents3.Label {
                             Layout.fillWidth: true
+                            visible:          !(filteredModel.count === 1 && container.singleWindowMode === 1)
                             text:             delegate.windowTitle
                             elide:            Text.ElideRight
                             opacity:          delegate.isMinimized ? 0.6 : 1.0
@@ -216,7 +244,7 @@ PlasmoidItem {
                     }
                 } // delegate
             } // Repeater
-        } // Grid
+        } // Item (windowGrid)
 
         // Placeholder shown when no app is being tracked
         PlasmaComponents3.Label {
