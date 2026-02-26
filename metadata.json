@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "",
+                "Name": ""
+            }
+        ],
+        "Category": "Windows and Tasks",
+        "Description": "Shows windows of the currently active application",
+        "Icon": "window-duplicate",
+        "Id": "org.kde.plasma.appwindows",
+        "License": "GPL-2.0-or-later",
+        "Name": "App Windows",
+        "Version": "1.0",
+        "Website": ""
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
